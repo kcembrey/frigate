@@ -1,40 +1,33 @@
-version: "3"
+version: "3.9"
 services:
-  devcontainer:
-    container_name: frigate-devcontainer
-    # add groups from host for render, plugdev, video
+  frigate:
+    container_name: frigate
+    privileged: true
+    restart: unless-stopped
+    image: frigate
+    shm_size: "256mb"
     group_add:
+      - "106" # render
       - "109" # render
       - "110" # render
       - "44"  # video
       - "46"  # plugdev
-    shm_size: "256mb"
-    build:
-      context: .
-      dockerfile: docker/main/Dockerfile
-      # Use target devcontainer-trt for TensorRT dev
-      target: devcontainer
-    deploy:
-          resources:
-              reservations:
-                  devices:
-                      - driver: nvidia
-                        count: 1
-                        capabilities: [gpu]
     environment:
       YOLO_MODELS: yolov7-320
     devices:
-      - /dev/bus/usb:/dev/bus/usb
-      # - /dev/dri:/dev/dri # for intel hwaccel, needs to be updated for your hardware
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card0:/dev/dri/card0
+      - /dev/rga
+      - /dev/video-dec0:/dev/video-dec0
+      - /dev/video-enc0:/dev/video-enc0
     volumes:
       - .:/workspace/frigate:cached
-      - ./web/dist:/opt/frigate/web:cached
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
       - ./debug:/media/frigate
-      - /dev/bus/usb:/dev/bus/usb
-  mqtt:
-    container_name: mqtt
-    image: eclipse-mosquitto:1.6
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000
     ports:
-      - "1883:1883"
+      - "5000:5000"
