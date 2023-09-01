@@ -56,7 +56,6 @@ COPY labelmap.txt .
 # yolov5 RKNN model converted from tflite
 COPY yolov5s_f16.rknn .
 COPY ssd_mobilenet_v1_coco.rknn .
-COPY box_priors.txt .
 
 # Get Audio Model and labels
 RUN wget -qO cpu_audio_model.tflite https://tfhub.dev/google/lite-model/yamnet/classification/tflite/1?lite-format=tflite
