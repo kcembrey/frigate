@@ -1,16 +1,25 @@
-mqtt:
-  host: mqtt
+detectors:
+  armnn:
+    type: armnn
 
-cameras:
-  test:
-    ffmpeg:
-      inputs:
-        - path: /media/frigate/car-stopping.mp4
-          input_args: -re -stream_loop -1 -fflags +genpts
-          roles:
-            - detect
-            - rtmp
-    detect:
-      height: 1080
-      width: 1920
-      fps: 5
+model:
+  width: 320
+  height: 320
+
+record:
+  enabled: true
+  events:
+    retain:
+      default: 10
+      mode: motion
+
+ffmpeg:
+  hwaccel_args: -hwaccel drm -hwaccel_device /dev/dri/renderD128 -c:v h264_rkmpp_decoder -vcodec h264_rkmpp_decoder
+
+snapshots:
+  enabled: True
+
+detect:
+  enabled: True # <---- disable detection until you have a working camera feed
+  width: 1280 # <---- update for your camera's resolution
+  height: 720 # <---- update for your camera's resolution
