@@ -55,6 +55,8 @@ RUN mkdir -p ./usr/lib && \
 COPY labelmap.txt .
 # yolov5 RKNN model converted from tflite
 COPY yolov5s_f16.rknn .
+COPY yolov5s-640-640.rknn .
+COPY yolov5s_LubanCat.rknn .
 COPY ssd_mobilenet_v1_coco.rknn .
 
 # Get Audio Model and labels
@@ -76,15 +78,18 @@ ARG TZ=America/Mexico_City
 # Use a separate container to build wheels to prevent build dependencies in final image
 RUN apt-get -qq update \
     && apt-get -qq install -y \
+    software-properties-common \
     apt-transport-https \
     gnupg \
     wget \
     && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 648ACFD622F3D138 \
     && echo "deb http://deb.debian.org/debian bullseye main contrib non-free" | tee /etc/apt/sources.list.d/raspi.list \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get -qq update \
     && apt-get -qq install -y \
     python3.9 \
     python3.9-dev \
+    python3.9-distutils \
     wget \
     # opencv dependencies
     build-essential cmake git pkg-config libgtk-3-dev \
@@ -96,10 +101,6 @@ RUN apt-get -qq update \
     # scipy dependencies
     gcc gfortran libopenblas-dev liblapack-dev software-properties-common && \
     rm -rf /var/lib/apt/lists/*
-
-RUN add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt install -y python3.9-distutils
-
 # Ensure python3 defaults to python3.9
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
 

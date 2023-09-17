@@ -120,19 +120,19 @@ else
 apt-get -qq update
 # TODO: move all apt-get installs to dedicated script for having it in a single Docker layer = performance of reruns.
 apt-get install -y git build-essential yasm pkg-config \
-libtool coreutils autoconf automake build-essential cmake \
-doxygen git graphviz imagemagick libasound2-dev libass-dev \
-libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev \
-libavutil-dev libfreetype6-dev libgmp-dev libmp3lame-dev \
-libopencore-amrnb-dev libopencore-amrwb-dev libopus-dev \
-librtmp-dev libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
-libsdl2-net-dev libsdl2-ttf-dev libsnappy-dev libsoxr-dev \
-libssh-dev libssl-dev libtool libv4l-dev libva-dev libvdpau-dev \
-libvo-amrwbenc-dev libvorbis-dev libwebp-dev libx264-dev libx265-dev \
-libxcb-shape0-dev libxcb-shm0-dev libxcb-xfixes0-dev libxcb1-dev \
-libxml2-dev lzma-dev meson nasm pkg-config python3-dev \
-python3-pip texinfo wget yasm zlib1g-dev libdrm-dev libaom-dev libdav1d-dev \
-libmp3lame-dev
+    libtool coreutils autoconf automake build-essential cmake \
+    doxygen git graphviz imagemagick libasound2-dev libass-dev \
+    libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev \
+    libavutil-dev libfreetype6-dev libgmp-dev libmp3lame-dev \
+    libopencore-amrnb-dev libopencore-amrwb-dev libopus-dev \
+    librtmp-dev libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
+    libsdl2-net-dev libsdl2-ttf-dev libsnappy-dev libsoxr-dev \
+    libssh-dev libssl-dev libtool libv4l-dev libva-dev libvdpau-dev \
+    libvo-amrwbenc-dev libvorbis-dev libwebp-dev libx264-dev libx265-dev \
+    libxcb-shape0-dev libxcb-shm0-dev libxcb-xfixes0-dev libxcb1-dev \
+    libxml2-dev lzma-dev meson nasm pkg-config python3-dev \
+    python3-pip texinfo wget yasm zlib1g-dev libdrm-dev libaom-dev libdav1d-dev \
+    libmp3lame-dev
 
 cd /tmp
 git clone https://github.com/rockchip-linux/mpp.git
