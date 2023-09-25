@@ -13,6 +13,8 @@ services:
       - "44"  # video
       - "46"  # plugdev
     environment:
+      FFMPEG_RKMPP_PIXFMT: "YUV420P"
+      LD_PRELOAD: /usr/lib/aarch64-linux-gnu/libdri2to3.so
       YOLO_MODELS: yolov7-320
     devices:
       - /dev/dri/renderD128:/dev/dri/renderD128
@@ -23,11 +25,15 @@ services:
     volumes:
       - .:/workspace/frigate:cached
       - /etc/localtime:/etc/localtime:ro
+      - ./config/config.yml:/config/config.yml
+      - /media/frigate:/media/frigate
       - ./config:/config
-      - ./debug:/media/frigate
       - type: tmpfs
         target: /tmp/cache
         tmpfs:
           size: 1000000000
     ports:
       - "5000:5000"
+      - "8554:8554" # RTSP feeds
+      - "8555:8555/tcp" # WebRTC over tcp
+      - "8555:8555/udp" # WebRTC over udp

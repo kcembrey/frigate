@@ -121,6 +121,9 @@ RUN mkdir -p /rootfs/usr/lib/ArmNN-linux-aarch64 && \
     tar xfvz ./ArmNN-linux-aarch64.tar.gz -C /rootfs/usr/lib/ArmNN-linux-aarch64 && \
     rm ./ArmNN-linux-aarch64.tar.gz
 
+RUN --mount=type=bind,source=docker/main/install_armnn.sh,target=/deps/install_armnn.sh \
+    /deps/install_armnn.sh
+
 # Collect deps in a single layer
 FROM scratch AS deps-rootfs
 COPY --from=nginx /usr/local/nginx/ /usr/local/nginx/
@@ -129,6 +132,7 @@ COPY --from=s6-overlay /rootfs/ /
 COPY --from=models /rootfs/ /
 COPY docker/main/rootfs/ /
 COPY --from=armnn /rootfs/ /
+COPY --from=rockpi /rootfs/ /
 
 
 # Frigate deps (ffmpeg, python, nginx, go2rtc, s6-overlay, etc)
@@ -168,6 +172,12 @@ ENV LD_LIBRARY_PATH="/usr/lib/ArmNN-linux-aarch64:${LD_LIBRARY_PATH}"
 
 ENTRYPOINT ["/init"]
 CMD []
+
+# RockPi Requirements
+FROM base AS rockpi
+RUN mkdir -p /rootfs/usr/lib/rockpi
+RUN --mount=type=bind,source=docker/main/install_rockpi.sh,target=/deps/install_rockpi.sh \
+    /deps/install_rockpi.sh
 
 # Frigate deps with Node.js and NPM for devcontainer
 FROM deps AS devcontainer
