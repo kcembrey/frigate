@@ -77,7 +77,7 @@ class NorfairTracker(ObjectTracker):
         self.tracker = Tracker(
             distance_function=frigate_distance,
             distance_threshold=2.5,
-            initialization_delay=0,
+            initialization_delay=config.detect.fps / 2,
             hit_counter_max=self.max_disappeared,
         )
         if self.ptz_autotracker_enabled.value:
@@ -273,9 +273,11 @@ class NorfairTracker(ObjectTracker):
                 min(self.detect_config.width - 1, estimate[2]),
                 min(self.detect_config.height - 1, estimate[3]),
             )
+            estimate_velocity = tuple(t.estimate_velocity.flatten().astype(int))
             obj = {
                 **t.last_detection.data,
                 "estimate": estimate,
+                "estimate_velocity": estimate_velocity,
             }
             active_ids.append(t.global_id)
             if t.global_id not in self.track_id_map:

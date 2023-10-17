@@ -21,7 +21,6 @@ from frigate.log import LogPipe
 from frigate.motion import MotionDetector
 from frigate.motion.improved_motion import ImprovedMotionDetector
 from frigate.object_detection import RemoteObjectDetector
-from frigate.ptz.autotrack import ptz_moving_at_frame_time
 from frigate.track import ObjectTracker
 from frigate.track.norfair_tracker import NorfairTracker
 from frigate.types import PTZMetricsTypes
@@ -98,13 +97,8 @@ def filtered(obj, objects_to_track, object_filters):
 
 
 def get_min_region_size(model_config: ModelConfig) -> int:
-    """Get the min region size and ensure it is divisible by 4."""
-    half = int(max(model_config.height, model_config.width) / 2)
-
-    if half % 4 == 0:
-        return half
-
-    return int((half + 3) / 4) * 4
+    """Get the min region size."""
+    return max(model_config.height, model_config.width)
 
 
 def create_tensor_input(frame, model_config: ModelConfig, region):
@@ -772,6 +766,7 @@ def process_frames(
             continue
 
         current_frame_time.value = frame_time
+        ptz_metrics["ptz_frame_time"].value = frame_time
 
         frame = frame_manager.get(
             f"{camera_name}{frame_time}", (frame_shape[0] * 3 // 2, frame_shape[1])
@@ -781,19 +776,8 @@ def process_frames(
             logger.info(f"{camera_name}: frame {frame_time} is not in memory store.")
             continue
 
-        # look for motion if enabled and ptz is not moving
-        # ptz_moving_at_frame_time() always returns False for
-        # non ptz/autotracking cameras
-        motion_boxes = (
-            motion_detector.detect(frame)
-            if motion_enabled.value
-            and not ptz_moving_at_frame_time(
-                frame_time,
-                ptz_metrics["ptz_start_time"].value,
-                ptz_metrics["ptz_stop_time"].value,
-            )
-            else []
-        )
+        # look for motion if enabled
+        motion_boxes = motion_detector.detect(frame) if motion_enabled.value else []
 
         regions = []
         consolidated_detections = []
@@ -818,8 +802,10 @@ def process_frames(
                 )
                 # and it hasn't disappeared
                 and object_tracker.disappeared[obj["id"]] == 0
-                # and it doesn't overlap with any current motion boxes
-                and not intersects_any(obj["box"], motion_boxes)
+                # and it doesn't overlap with any current motion boxes when not calibrating
+                and not intersects_any(
+                    obj["box"], [] if motion_detector.is_calibrating() else motion_boxes
+                )
             ]
 
             # get tracked object boxes that aren't stationary
@@ -829,7 +815,10 @@ def process_frames(
                 if obj["id"] not in stationary_object_ids
             ]
 
-            combined_boxes = motion_boxes + tracked_object_boxes
+            combined_boxes = tracked_object_boxes
+            # only add in the motion boxes when not calibrating
+            if not motion_detector.is_calibrating():
+                combined_boxes += motion_boxes
 
             cluster_candidates = get_cluster_candidates(
                 frame_shape, region_min_size, combined_boxes

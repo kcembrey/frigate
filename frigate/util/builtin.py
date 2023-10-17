@@ -87,7 +87,8 @@ def load_config_with_no_duplicates(raw_config) -> dict:
     """Get config ensuring duplicate keys are not allowed."""
 
     # https://stackoverflow.com/a/71751051
-    class PreserveDuplicatesLoader(yaml.loader.Loader):
+    # important to use SafeLoader here to avoid RCE
+    class PreserveDuplicatesLoader(yaml.loader.SafeLoader):
         pass
 
     def map_constructor(loader, node, deep=False):
@@ -134,7 +135,7 @@ def get_ffmpeg_arg_list(arg: Any) -> list:
     return arg if isinstance(arg, list) else shlex.split(arg)
 
 
-def load_labels(path, encoding="utf-8"):
+def load_labels(path, encoding="utf-8", prefill=91):
     """Loads labels from file (with or without index numbers).
     Args:
       path: path to label file.
@@ -143,7 +144,7 @@ def load_labels(path, encoding="utf-8"):
       Dictionary mapping indices to labels.
     """
     with open(path, "r", encoding=encoding) as f:
-        labels = {index: "unknown" for index in range(91)}
+        labels = {index: "unknown" for index in range(prefill)}
         lines = f.readlines()
         if not lines:
             return {}
@@ -249,3 +250,15 @@ def update_yaml(data, key_path, new_value):
                 temp[last_key] = new_value
 
     return data
+
+
+def find_by_key(dictionary, target_key):
+    if target_key in dictionary:
+        return dictionary[target_key]
+    else:
+        for value in dictionary.values():
+            if isinstance(value, dict):
+                result = find_by_key(value, target_key)
+                if result is not None:
+                    return result
+    return None

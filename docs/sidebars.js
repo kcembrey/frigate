@@ -11,6 +11,7 @@ module.exports = {
       "guides/configuring_go2rtc",
       "guides/false_positives",
       "guides/ha_notifications",
+      "guides/ha_network_storage",
       "guides/stationary_objects",
       "guides/reverse_proxy",
     ],
@@ -20,8 +21,8 @@ module.exports = {
         {
           type: "link",
           label: "Go2RTC Configuration Reference",
-          href: "https://github.com/AlexxIT/go2rtc/tree/v1.6.2#configuration"
-        }
+          href: "https://github.com/AlexxIT/go2rtc/tree/v1.8.1#configuration",
+        },
       ],
       Detectors: [
         "configuration/object_detectors",
@@ -56,12 +57,11 @@ module.exports = {
       "integrations/mqtt",
       "integrations/third_party_extensions",
     ],
-    Troubleshooting: [
-      "troubleshooting/faqs",
-    ],
+    "Frigate+": ["plus/index"],
+    Troubleshooting: ["troubleshooting/faqs", "troubleshooting/recordings"],
     Development: [
       "development/contributing",
-      "development/contributing-boards"
+      "development/contributing-boards",
     ],
   },
 };

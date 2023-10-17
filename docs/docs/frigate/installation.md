@@ -25,8 +25,8 @@ Frigate uses the following locations for read/write operations in the container.
 - `/media/frigate/clips`: Used for snapshot storage. In the future, it will likely be renamed from `clips` to `snapshots`. The file structure here cannot be modified and isn't intended to be browsed or managed manually.
 - `/media/frigate/recordings`: Internal system storage for recording segments. The file structure here cannot be modified and isn't intended to be browsed or managed manually.
 - `/media/frigate/exports`: Storage for clips and timelapses that have been exported via the WebUI or API.
-- `/tmp/cache`: Cache location for recording segments. Initial recordings are written here before being checked and converted to mp4 and moved to the recordings folder.
-- `/dev/shm`: It is not recommended to modify this directory or map it with docker. This is the location for raw decoded frames in shared memory and it's size is impacted by the `shm-size` calculations below.
+- `/tmp/cache`: Cache location for recording segments. Initial recordings are written here before being checked and converted to mp4 and moved to the recordings folder. Segments generated via the `clip.mp4` endpoints are also concatenated and processed here. It is recommended to use a [`tmpfs`](https://docs.docker.com/storage/tmpfs/) mount for this.
+- `/dev/shm`: Internal cache for raw decoded frames in shared memory. It is not recommended to modify this directory or map it with docker. The minimum size is impacted by the `shm-size` calculations below.
 
 #### Common docker compose storage configurations
 
@@ -51,7 +51,7 @@ services:
 
 Frigate utilizes shared memory to store frames during processing. The default `shm-size` provided by Docker is **64MB**.
 
-The default shm size of **64MB** is fine for setups with **2 cameras** detecting at **720p**. If Frigate is exiting with "Bus error" messages, it is likely because you have too many high resolution cameras and you need to specify a higher shm size.
+The default shm size of **64MB** is fine for setups with **2 cameras** detecting at **720p**. If Frigate is exiting with "Bus error" messages, it is likely because you have too many high resolution cameras and you need to specify a higher shm size, using [`--shm-size`](https://docs.docker.com/engine/reference/run/#runtime-constraints-on-resources) (or [`service.shm_size`](https://docs.docker.com/compose/compose-file/compose-file-v2/#shm_size) in docker-compose).
 
 The Frigate container also stores logs in shm, which can take up to **30MB**, so make sure to take this into account in your math as well.
 
@@ -149,12 +149,14 @@ docker run -d \
   ghcr.io/blakeblackshear/frigate:stable
 ```
 
-## Home Assistant Operating System (HassOS)
+## Home Assistant Addon
 
 :::caution
 
+As of HomeAssistant OS 10.2 and Core 2023.6 defining separate network storage for media is supported.
+
 There are important limitations in Home Assistant Operating System to be aware of:
-- Utilizing external storage for recordings or snapshots requires [modifying udev rules manually](https://community.home-assistant.io/t/solved-mount-usb-drive-in-hassio-to-be-used-on-the-media-folder-with-udev-customization/258406/46).
+- Separate local storage for media is not yet supported by Home Assistant
 - AMD GPUs are not supported because HA OS does not include the mesa driver.
 - Nvidia GPUs are not supported because addons do not support the nvidia runtime.
 
@@ -162,7 +164,7 @@ There are important limitations in Home Assistant Operating System to be aware o
 
 :::tip
 
-If possible, it is recommended to run Frigate standalone in Docker and use [Frigate's Proxy Addon](https://github.com/blakeblackshear/frigate-hass-addons/blob/main/frigate_proxy/README.md).
+See [the network storage guide](/guides/ha_network_storage.md) for instructions to setup network storage for frigate.
 
 :::
 
@@ -185,32 +187,6 @@ There are several versions of the addon available:
 | Frigate NVR Beta               | Beta release with protection mode on                       |
 | Frigate NVR Beta (Full Access) | Beta release with the option to disable protection mode    |
 
-## Home Assistant Supervised
-
-:::caution
-
-There are important limitations in Home Assistant Supervised to be aware of:
-- Nvidia GPUs are not supported because addons do not support the nvidia runtime.
-
-:::
-
-:::tip
-
-If possible, it is recommended to run Frigate standalone in Docker and use [Frigate's Proxy Addon](https://github.com/blakeblackshear/frigate-hass-addons/blob/main/frigate_proxy/README.md).
-
-:::
-
-When running Home Assistant with the [Supervised install method](https://github.com/home-assistant/supervised-installer), you can get the benefit of running the Addon along with the ability to customize the storage used by Frigate.
-
-In order to customize the storage location for Frigate, simply use `fstab` to mount the drive you want at `/usr/share/hassio/media`. Here is an example fstab entry:
-
-```shell
-UUID=1a65fec6-c25f-404a-b3d2-1f2fcf6095c8 /media/data ext4 defaults 0 0
-/media/data/homeassistant/media /usr/share/hassio/media none bind 0 0
-```
-
-Then follow the instructions listed for [Home Assistant Operating System](#home-assistant-operating-system-hassos).
-
 ## Kubernetes
 
 Use the [helm chart](https://github.com/blakeblackshear/blakeshome-charts/tree/master/charts/frigate).
@@ -224,9 +200,11 @@ To install make sure you have the [community app plugin here](https://forums.unr
 
 It is recommended to run Frigate in LXC for maximum performance. See [this discussion](https://github.com/blakeblackshear/frigate/discussions/1111) for more information.
 
-## ESX
+## ESXi
 
-For details on running Frigate under ESX, see details [here](https://github.com/blakeblackshear/frigate/issues/305).
+For details on running Frigate using ESXi, please see the instructions [here](https://williamlam.com/2023/05/frigate-nvr-with-coral-tpu-igpu-passthrough-using-esxi-on-intel-nuc.html).
+
+If you're running Frigate on a rack mounted server and want to passthough the Google Coral, [read this.](https://github.com/blakeblackshear/frigate/issues/305)
 
 ## Synology NAS on DSM 7
 

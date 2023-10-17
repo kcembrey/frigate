@@ -39,6 +39,10 @@ if go2rtc_config.get("api") is None:
 elif go2rtc_config["api"].get("origin") is None:
     go2rtc_config["api"]["origin"] = "*"
 
+# Need to set default location for HA config
+if go2rtc_config.get("hass") is None:
+    go2rtc_config["hass"] = {"config": "/config"}
+
 # we want to ensure that logs are easy to read
 if go2rtc_config.get("log") is None:
     go2rtc_config["log"] = {"format": "text"}
@@ -96,12 +100,25 @@ for name in go2rtc_config.get("streams", {}):
     stream = go2rtc_config["streams"][name]
 
     if isinstance(stream, str):
-        go2rtc_config["streams"][name] = go2rtc_config["streams"][name].format(
-            **FRIGATE_ENV_VARS
-        )
+        try:
+            go2rtc_config["streams"][name] = go2rtc_config["streams"][name].format(
+                **FRIGATE_ENV_VARS
+            )
+        except KeyError as e:
+            print(
+                "[ERROR] Invalid substitution found, see https://docs.frigate.video/configuration/restream#advanced-restream-configurations for more info."
+            )
+            sys.exit(e)
+
     elif isinstance(stream, list):
         for i, stream in enumerate(stream):
-            go2rtc_config["streams"][name][i] = stream.format(**FRIGATE_ENV_VARS)
+            try:
+                go2rtc_config["streams"][name][i] = stream.format(**FRIGATE_ENV_VARS)
+            except KeyError as e:
+                print(
+                    "[ERROR] Invalid substitution found, see https://docs.frigate.video/configuration/restream#advanced-restream-configurations for more info."
+                )
+                sys.exit(e)
 
 # add birdseye restream stream if enabled
 if config.get("birdseye", {}).get("restream", False):

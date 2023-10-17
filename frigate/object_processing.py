@@ -29,6 +29,7 @@ from frigate.util.image import (
     calculate_region,
     draw_box_with_label,
     draw_timestamp,
+    is_label_printable,
 )
 
 logger = logging.getLogger(__name__)
@@ -229,6 +230,9 @@ class TrackedObject:
 
             # if the position changed, signal an update
             if self.obj_data["position_changes"] != obj_data["position_changes"]:
+                significant_change = True
+
+            if self.obj_data["attributes"] != obj_data["attributes"]:
                 significant_change = True
 
             # if the motionless_count reaches the stationary threshold
@@ -509,13 +513,21 @@ class CameraState:
 
                 # draw the bounding boxes on the frame
                 box = obj["box"]
+                text = (
+                    obj["label"]
+                    if (
+                        not obj.get("sub_label")
+                        or not is_label_printable(obj["sub_label"][0])
+                    )
+                    else obj["sub_label"][0]
+                )
                 draw_box_with_label(
                     frame_copy,
                     box[0],
                     box[1],
                     box[2],
                     box[3],
-                    obj["label"],
+                    text,
                     f"{obj['score']:.0%} {int(obj['area'])}",
                     thickness=thickness,
                     color=color,

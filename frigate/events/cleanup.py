@@ -83,7 +83,10 @@ class EventCleanup(threading.Thread):
                 datetime.datetime.now() - datetime.timedelta(days=expire_days)
             ).timestamp()
             # grab all events after specific time
-            expired_events = Event.select().where(
+            expired_events = Event.select(
+                Event.id,
+                Event.camera,
+            ).where(
                 Event.camera.not_in(self.camera_keys),
                 Event.start_time < expire_after,
                 Event.label == event.label,
@@ -133,7 +136,10 @@ class EventCleanup(threading.Thread):
                     datetime.datetime.now() - datetime.timedelta(days=expire_days)
                 ).timestamp()
                 # grab all events after specific time
-                expired_events = Event.select().where(
+                expired_events = Event.select(
+                    Event.id,
+                    Event.camera,
+                ).where(
                     Event.camera == name,
                     Event.start_time < expire_after,
                     Event.label == event.label,
@@ -168,6 +174,7 @@ class EventCleanup(threading.Thread):
             camera,
             has_snapshot,
             has_clip,
+            end_time,
             row_number() over (
               partition by label, camera, round(start_time/5,0)*5
               order by end_time-start_time desc
@@ -176,7 +183,7 @@ class EventCleanup(threading.Thread):
         )
 
         select distinct id, camera, has_snapshot, has_clip from grouped_events
-        where copy_number > 1;"""
+        where copy_number > 1 and end_time not null;"""
 
         duplicate_events = Event.raw(duplicate_query)
         for event in duplicate_events:
