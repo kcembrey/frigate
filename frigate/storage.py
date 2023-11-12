@@ -10,6 +10,7 @@ from peewee import fn
 from frigate.config import FrigateConfig
 from frigate.const import RECORD_DIR
 from frigate.models import Event, Recordings
+from frigate.util.builtin import clear_and_unlink
 
 logger = logging.getLogger(__name__)
 bandwidth_equation = Recordings.segment_size / (
@@ -35,7 +36,7 @@ class StorageMaintainer(threading.Thread):
             if self.camera_storage_stats.get(camera, {}).get("needs_refresh", True):
                 self.camera_storage_stats[camera] = {
                     "needs_refresh": (
-                        Recordings.select(fn.COUNT(Recordings.id))
+                        Recordings.select(fn.COUNT("*"))
                         .where(Recordings.camera == camera, Recordings.segment_size > 0)
                         .scalar()
                         < 50
@@ -99,13 +100,19 @@ class StorageMaintainer(threading.Thread):
             [b["bandwidth"] for b in self.camera_storage_stats.values()]
         )
 
-        recordings: Recordings = Recordings.select(
-            Recordings.id,
-            Recordings.start_time,
-            Recordings.end_time,
-            Recordings.segment_size,
-            Recordings.path,
-        ).order_by(Recordings.start_time.asc())
+        recordings: Recordings = (
+            Recordings.select(
+                Recordings.id,
+                Recordings.start_time,
+                Recordings.end_time,
+                Recordings.segment_size,
+                Recordings.path,
+            )
+            .order_by(Recordings.start_time.asc())
+            .namedtuples()
+            .iterator()
+        )
+
         retained_events: Event = (
             Event.select(
                 Event.start_time,
@@ -116,12 +123,12 @@ class StorageMaintainer(threading.Thread):
                 Event.has_clip,
             )
             .order_by(Event.start_time.asc())
-            .objects()
+            .namedtuples()
         )
 
         event_start = 0
         deleted_recordings = set()
-        for recording in recordings.objects().iterator():
+        for recording in recordings:
             # check if 1 hour of storage has been reclaimed
             if deleted_segments_size > hourly_bandwidth:
                 break
@@ -153,28 +160,43 @@ class StorageMaintainer(threading.Thread):
 
             # Delete recordings not retained indefinitely
             if not keep:
-                deleted_segments_size += recording.segment_size
-                Path(recording.path).unlink(missing_ok=True)
-                deleted_recordings.add(recording.id)
+                try:
+                    clear_and_unlink(Path(recording.path), missing_ok=False)
+                    deleted_recordings.add(recording.id)
+                    deleted_segments_size += recording.segment_size
+                except FileNotFoundError:
+                    # this file was not found so we must assume no space was cleaned up
+                    pass
 
         # check if need to delete retained segments
         if deleted_segments_size < hourly_bandwidth:
             logger.error(
                 f"Could not clear {hourly_bandwidth} MB, currently {deleted_segments_size} MB have been cleared. Retained recordings must be deleted."
             )
-            recordings = Recordings.select(
-                Recordings.id,
-                Recordings.path,
-                Recordings.segment_size,
-            ).order_by(Recordings.start_time.asc())
+            recordings = (
+                Recordings.select(
+                    Recordings.id,
+                    Recordings.path,
+                    Recordings.segment_size,
+                )
+                .order_by(Recordings.start_time.asc())
+                .namedtuples()
+                .iterator()
+            )
 
-            for recording in recordings.objects().iterator():
+            for recording in recordings:
                 if deleted_segments_size > hourly_bandwidth:
                     break
 
-                deleted_segments_size += recording.segment_size
-                Path(recording.path).unlink(missing_ok=True)
-                deleted_recordings.add(recording.id)
+                try:
+                    clear_and_unlink(Path(recording.path), missing_ok=False)
+                    deleted_segments_size += recording.segment_size
+                    deleted_recordings.add(recording.id)
+                except FileNotFoundError:
+                    # this file was not found so we must assume no space was cleaned up
+                    pass
+        else:
+            logger.info(f"Cleaned up {deleted_segments_size} MB of recordings")
 
         logger.debug(f"Expiring {len(deleted_recordings)} recordings")
         # delete up to 100,000 at a time

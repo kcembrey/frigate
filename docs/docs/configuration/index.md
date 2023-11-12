@@ -75,11 +75,11 @@ mqtt:
   # NOTE: must be unique if you are running multiple instances
   client_id: frigate
   # Optional: user
-  # NOTE: MQTT user can be specified with an environment variables that must begin with 'FRIGATE_'.
+  # NOTE: MQTT user can be specified with an environment variables or docker secrets that must begin with 'FRIGATE_'.
   #       e.g. user: '{FRIGATE_MQTT_USER}'
   user: mqtt_user
   # Optional: password
-  # NOTE: MQTT password can be specified with an environment variables that must begin with 'FRIGATE_'.
+  # NOTE: MQTT password can be specified with an environment variables or docker secrets that must begin with 'FRIGATE_'.
   #       e.g. password: '{FRIGATE_MQTT_PASSWORD}'
   password: password
   # Optional: tls_ca_certs for enabling TLS using self-signed certs (default: None)
@@ -222,15 +222,17 @@ ffmpeg:
 # Optional: Detect configuration
 # NOTE: Can be overridden at the camera level
 detect:
-  # Optional: width of the frame for the input with the detect role (default: shown below)
+  # Optional: width of the frame for the input with the detect role (default: use native stream resolution)
   width: 1280
-  # Optional: height of the frame for the input with the detect role (default: shown below)
+  # Optional: height of the frame for the input with the detect role (default: use native stream resolution)
   height: 720
   # Optional: desired fps for your camera for the input with the detect role (default: shown below)
   # NOTE: Recommended value of 5. Ideally, try and reduce your FPS on the camera.
   fps: 5
   # Optional: enables detection for the camera (default: True)
   enabled: True
+  # Optional: Number of consecutive detection hits required for an object to be initialized in the tracker. (default: 1/2 the frame rate)
+  min_initialized: 2
   # Optional: Number of frames without a detection before Frigate considers an object to be gone. (default: 5x the frame rate)
   max_disappeared: 25
   # Optional: Configuration for stationary object tracking
@@ -436,7 +438,7 @@ rtmp:
   enabled: False
 
 # Optional: Restream configuration
-# Uses https://github.com/AlexxIT/go2rtc (v1.8.1)
+# Uses https://github.com/AlexxIT/go2rtc (v1.8.2)
 go2rtc:
 
 # Optional: jsmpeg stream configuration for WebUI
@@ -489,7 +491,7 @@ cameras:
       # Required: A list of input streams for the camera. See documentation for more information.
       inputs:
         # Required: the path to the stream
-        # NOTE: path may include environment variables, which must begin with 'FRIGATE_' and be referenced in {}
+        # NOTE: path may include environment variables or docker secrets, which must begin with 'FRIGATE_' and be referenced in {}
         - path: rtsp://viewer:{FRIGATE_RTSP_PASSWORD}@10.0.10.10:554/cam/realmonitor?channel=1&subtype=2
           # Required: list of roles for this stream. valid values are: audio,detect,record,rtmp
           # NOTICE: In addition to assigning the audio, record, and rtmp roles,
@@ -517,6 +519,9 @@ cameras:
     # Optional: timeout for highest scoring image before allowing it
     # to be replaced by a newer image. (default: shown below)
     best_image_timeout: 60
+
+    # Optional: URL to visit the camera web UI directly from the system page. Might not be available on every camera.
+    webui_url: ""
 
     # Optional: zones for this camera
     zones:

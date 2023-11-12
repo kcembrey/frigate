@@ -85,6 +85,7 @@ class TimelineProcessor(threading.Thread):
             if (
                 prev_event_data["current_zones"] != event_data["current_zones"]
                 and len(event_data["current_zones"]) > 0
+                and not event_data["stationary"]
             ):
                 timeline_entry[Timeline.class_type] = "entered_zone"
                 timeline_entry[Timeline.data]["zones"] = event_data["current_zones"]
@@ -101,5 +102,11 @@ class TimelineProcessor(threading.Thread):
                 )[0]
                 Timeline.insert(timeline_entry).execute()
         elif event_type == "end":
-            timeline_entry[Timeline.class_type] = "gone"
-            Timeline.insert(timeline_entry).execute()
+            if event_data["has_clip"] or event_data["has_snapshot"]:
+                timeline_entry[Timeline.class_type] = "gone"
+                Timeline.insert(timeline_entry).execute()
+            else:
+                # if event was not saved then the timeline entries should be deleted
+                Timeline.delete().where(
+                    Timeline.source_id == event_data["id"]
+                ).execute()

@@ -11,6 +11,7 @@ import axios from 'axios';
 import { useState, useRef, useCallback, useMemo } from 'preact/hooks';
 import VideoPlayer from '../components/VideoPlayer';
 import { StarRecording } from '../icons/StarRecording';
+import { Submitted } from '../icons/Submitted';
 import { Snapshot } from '../icons/Snapshot';
 import { UploadPlus } from '../icons/UploadPlus';
 import { Clip } from '../icons/Clip';
@@ -63,6 +64,7 @@ export default function Events({ path, ...props }) {
     time_range: '00:00,24:00',
     timezone,
     favorites: props.favorites ?? 0,
+    is_submitted: props.is_submitted ?? -1,
     event: props.event,
   });
   const [state, setState] = useState({
@@ -94,7 +96,7 @@ export default function Events({ path, ...props }) {
     showDeleteFavorite: false,
   });
 
-  const [showInProgress, setShowInProgress] = useState(true);
+  const [showInProgress, setShowInProgress] = useState((props.event || props.cameras || props.labels) == null);
 
   const eventsFetcher = useCallback(
     (path, params) => {
@@ -121,8 +123,12 @@ export default function Events({ path, ...props }) {
     [searchParams]
   );
 
-  const { data: ongoingEvents } = useSWR(['events', { in_progress: 1, include_thumbnails: 0 }]);
-  const { data: eventPages, mutate, size, setSize, isValidating } = useSWRInfinite(getKey, eventsFetcher);
+  const { data: ongoingEvents, mutate: refreshOngoingEvents } = useSWR(['events', { in_progress: 1, include_thumbnails: 0 }]);
+  const { data: eventPages, mutate: refreshEvents, size, setSize, isValidating } = useSWRInfinite(getKey, eventsFetcher);
+  const mutate = () => {
+    refreshEvents();
+    refreshOngoingEvents();
+  }
 
   const { data: allLabels } = useSWR(['labels']);
   const { data: allSubLabels } = useSWR(['sub_labels', { split_joined: 1 }]);
@@ -277,6 +283,16 @@ export default function Events({ path, ...props }) {
     [path, searchParams, setSearchParams]
   );
 
+  const onClickFilterSubmitted = useCallback(
+    () => {
+      if( ++searchParams.is_submitted > 1 ) {
+        searchParams.is_submitted = -1;
+      }
+      onFilter('is_submitted', searchParams.is_submitted);
+    },
+    [searchParams, onFilter]
+  );
+
   const isDone = (eventPages?.[eventPages.length - 1]?.length ?? 0) < API_LIMIT;
 
   // hooks for infinite scroll
@@ -390,11 +406,22 @@ export default function Events({ path, ...props }) {
           </Button>
         )}
 
-        <StarRecording
-          className="h-10 w-10 text-yellow-300 cursor-pointer ml-auto"
-          onClick={() => onFilter('favorites', searchParams.favorites ? 0 : 1)}
-          fill={searchParams.favorites == 1 ? 'currentColor' : 'none'}
-        />
+        <div className="ml-auto flex">
+          {config.plus.enabled && (
+            <Submitted
+              className="h-10 w-10 text-yellow-300 cursor-pointer ml-auto"
+              onClick={() => onClickFilterSubmitted()}
+              inner_fill={searchParams.is_submitted == 1 ? 'currentColor' : 'gray'}
+              outer_stroke={searchParams.is_submitted >= 0 ? 'currentColor' : 'gray'}
+            />
+          )}
+
+          <StarRecording
+            className="h-10 w-10 text-yellow-300 cursor-pointer ml-auto"
+            onClick={() => onFilter('favorites', searchParams.favorites ? 0 : 1)}
+            fill={searchParams.favorites == 1 ? 'currentColor' : 'none'}
+          />
+        </div>
 
         <div ref={datePicker} className="ml-right">
           <CalendarIcon
@@ -772,11 +799,11 @@ function Event({
             <div className="text-sm flex">
               <Clock className="h-5 w-5 mr-2 inline" />
               {formatUnixTimestampToDateTime(event.start_time, { ...config.ui })}
-              <div className="hidden md:inline">
+              <div className="hidden sm:inline">
                 <span className="m-1">-</span>
                 <TimeAgo time={event.start_time * 1000} dense />
               </div>
-              <div className="hidden md:inline">
+              <div className="hidden sm:inline">
                 <span className="m-1" />( {getDurationFromTimestamps(event.start_time, event.end_time)} )
               </div>
             </div>

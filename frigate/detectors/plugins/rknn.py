@@ -1,138 +1,122 @@
 import logging
-import torch
-import torchvision
+from typing import Literal
+
+import cv2
+import cv2.dnn
 import numpy as np
+
+try:
+    from hide_warnings import hide_warnings
+except:  # noqa: E722
+
+    def hide_warnings(func):
+        pass
+
+
+from pydantic import Field
 
 from frigate.detectors.detection_api import DetectionApi
 from frigate.detectors.detector_config import BaseDetectorConfig
-from typing import Literal
-from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
 DETECTOR_KEY = "rknn"
 
-def non_max_suppression(
-        prediction,
-        conf_thres=0.25,
-        iou_thres=0.45,
-        classes=None,
-        agnostic=False,
-        multi_label=False,
-        labels=(),
-        max_det=300,
-        nm=0,  # number of masks
-):
-    """Non-Maximum Suppression (NMS) on inference results to reject overlapping detections
-
-    Returns:
-         list of detections, on (n,6) tensor per image [xyxy, conf, cls]
-    """
-
-    # Checks
-    assert 0 <= conf_thres <= 1, f'Invalid Confidence threshold {conf_thres}, valid values are between 0.0 and 1.0'
-    assert 0 <= iou_thres <= 1, f'Invalid IoU {iou_thres}, valid values are between 0.0 and 1.0'
-    bs = prediction.shape[0]  # batch size
-    nc = prediction.shape[2] - nm - 5  # number of classes
-    xc = prediction[..., 4] > conf_thres  # candidates
-
-    max_wh = 7680  # (pixels) maximum box width and height
-    max_nms = 30000  # maximum number of boxes into torchvision.ops.nms()
-    time_limit = 0.5 + 0.05 * bs  # seconds to quit after
-    redundant = True  # require redundant detections
-    multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
-    merge = False  # use merge-NMS
-
-    mi = 5 + nc  # mask start index
-    output = [torch.zeros((0, 6 + nm), device='cpu')] * bs
-    for xi, x in enumerate(prediction):  # image index, image inference
-        # Apply constraints
-        # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
-        x = x[xc[xi]]  # confidence
-
-
-        # If none remain process next image
-        if not x.shape[0]:
-            continue
-
-        # Compute conf
-        x[:, 5:] *= x[:, 4:5]  # conf = obj_conf * cls_conf
-
-        # Box/Mask
-        box = xywh2xyxy(x[:, :4])  # center_x, center_y, width, height) to (x1, y1, x2, y2)
-        mask = x[:, mi:]  # zero columns if no masks
-
-        # Detections matrix nx6 (xyxy, conf, cls)
-        if multi_label:
-            i, j = (x[:, 5:mi] > conf_thres).nonzero(as_tuple=False).T
-            x = torch.cat((box[i], x[i, 5 + j, None], j[:, None].float(), mask[i]), 1)
-        else:  # best class only
-            conf, j = x[:, 5:mi].max(1, keepdim=True)
-            x = torch.cat((box, conf, j.float(), mask), 1)[conf.view(-1) > conf_thres]
-
-        # Check shape
-        n = x.shape[0]  # number of boxes
-        if not n:  # no boxes
-            continue
-        x = x[x[:, 4].argsort(descending=True)[:max_nms]]  # sort by confidence and remove excess boxes
-
-        # Batched NMS
-        c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
-        boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
-        i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
-        i = i[:max_det]  # limit detections
-        if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
-            # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
-            iou = box_iou(boxes[i], boxes) > iou_thres  # iou matrix
-            weights = iou * scores[None]  # box weights
-            x[i, :4] = torch.mm(weights, x[:, :4]).float() / weights.sum(1, keepdim=True)  # merged boxes
-            if redundant:
-                i = i[iou.sum(1) > 1]  # require redundancy
-
-        output[xi] = x[i]
-
-    return output
-
-def xywh2xyxy(x):
-    # Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
-    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
-    y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
-    y[..., 1] = x[..., 1] - x[..., 3] / 2  # top left y
-    y[..., 2] = x[..., 0] + x[..., 2] / 2  # bottom right x
-    y[..., 3] = x[..., 1] + x[..., 3] / 2  # bottom right y
-    return y
 
 class RknnDetectorConfig(BaseDetectorConfig):
     type: Literal[DETECTOR_KEY]
+    score_thresh: float = Field(
+        default=0.5, ge=0, le=1, title="Minimal confidence for detection."
+    )
+    nms_thresh: float = Field(
+        default=0.45, ge=0, le=1, title="IoU threshold for non-maximum suppression."
+    )
+
 
 class Rknn(DetectionApi):
     type_key = DETECTOR_KEY
 
     def __init__(self, config: RknnDetectorConfig):
-        from rknnlite.api import RKNNLite
-        self.rknn_lite = RKNNLite()
-        if self.rknn_lite.load_rknn(config.path) != 0:
-            logger.error('Error initialize rknn model')
-        if self.rknn_lite.init_runtime(core_mask=RKNNLite.NPU_CORE_AUTO) != 0:
-            logger.error('Error init rknn runtime')
+        self.height = config.model.height
+        self.width = config.model.width
+        self.score_thresh = config.score_thresh
+        self.nms_thresh = config.nms_thresh
 
-    def detect_raw(self, tensor_input):
-        raw_output = self.rknn_lite.inference(inputs=[tensor_input])
-        output = torch.mean(torch.Tensor(raw_output[0]), -1)
-        output = non_max_suppression(output)[0]
+        self.model_path = config.model.path or "/models/yolov8n-320x320.rknn"
+
+        from rknnlite.api import RKNNLite
+
+        self.rknn = RKNNLite(verbose=False)
+        if self.rknn.load_rknn(self.model_path) != 0:
+            logger.error("Error initializing rknn model.")
+        if self.rknn.init_runtime() != 0:
+            logger.error("Error initializing rknn runtime.")
+
+    def __del__(self):
+        self.rknn.release()
+
+    def postprocess(self, results):
+        """
+        Processes yolov8 output.
+
+        Args:
+        results: array with shape: (1, 84, n, 1) where n depends on yolov8 model size (for 320x320 model n=2100)
+
+        Returns:
+        detections: array with shape (20, 6) with 20 rows of (class, confidence, y_min, x_min, y_max, x_max)
+        """
+
+        results = np.transpose(results[0, :, :, 0])  # array shape (2100, 84)
+        classes = np.argmax(
+            results[:, 4:], axis=1
+        )  # array shape (2100,); index of class with max confidence of each row
+        scores = np.max(
+            results[:, 4:], axis=1
+        )  # array shape (2100,); max confidence of each row
+
+        # array shape (2100, 4); bounding box of each row
+        boxes = np.transpose(
+            np.vstack(
+                (
+                    results[:, 0] - 0.5 * results[:, 2],
+                    results[:, 1] - 0.5 * results[:, 3],
+                    results[:, 2],
+                    results[:, 3],
+                )
+            )
+        )
+
+        # indices of rows with confidence > SCORE_THRESH with Non-maximum Suppression (NMS)
+        result_boxes = cv2.dnn.NMSBoxes(
+            boxes, scores, self.score_thresh, self.nms_thresh, 0.5
+        )
 
         detections = np.zeros((20, 6), np.float32)
 
-        for i in range(len(output)):
-            if output[i][4] < 0.4 or i == 20:
+        for i in range(len(result_boxes)):
+            if i >= 20:
                 break
+
+            index = result_boxes[i]
             detections[i] = [
-                output[i][5],
-                output[i][4],
-                output[i][3],
-                output[i][2],
-                output[i][1],
-                output[i][0],
+                classes[index],
+                scores[index],
+                (boxes[index][1]) / self.height,
+                (boxes[index][0]) / self.width,
+                (boxes[index][1] + boxes[index][3]) / self.height,
+                (boxes[index][0] + boxes[index][2]) / self.width,
             ]
 
         return detections
+
+    @hide_warnings
+    def inference(self, tensor_input):
+        return self.rknn.inference(inputs=tensor_input)
+
+    def detect_raw(self, tensor_input):
+        output = self.inference(
+            [
+                tensor_input,
+            ]
+        )
+        return self.postprocess(output[0])
